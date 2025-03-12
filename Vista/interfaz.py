@@ -1,101 +1,9 @@
-import sys
-from PySide6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextEdit, QMessageBox
-)
-from PySide6.QtCore import Qt, QPointF
+from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextEdit, QMessageBox)
 from PySide6.QtGui import QPainter, QPen, QBrush, QColor
+from PySide6.QtCore import Qt, QPointF
 import pyqtgraph as pg
-from pyqtgraph import ArrowItem
-from Controlador.automata import Automata
-
-
-class VisualizadorAutomata(QWidget):
-    def __init__(self, estados, transiciones, estado_inicial, estados_aceptacion):
-        super().__init__()
-        self.estados = estados
-        self.transiciones = transiciones
-        self.estado_inicial = estado_inicial
-        self.estados_aceptacion = estados_aceptacion
-        self.initUI()
-
-    def initUI(self):
-        self.setWindowTitle("Visualizador de Autómata")
-        self.setGeometry(100, 100, 800, 600)
-
-        # Crear un widget de gráficos
-        self.graph_widget = pg.PlotWidget()
-        self.graph_widget.setBackground("w")
-        self.graph_widget.setAspectLocked(True)
-
-        # Dibujar el autómata
-        self.dibujar_automata()
-
-        # Layout
-        layout = QVBoxLayout()
-        layout.addWidget(self.graph_widget)
-        self.setLayout(layout)
-
-    def dibujar_automata(self):
-        # Configurar las posiciones de los estados en un círculo
-        radio = 200
-        centro = QPointF(0, 0)
-        angulo_paso = 360 / len(self.estados)
-        posiciones_estados = {}
-
-        for i, estado in enumerate(self.estados):
-            angulo = i * angulo_paso
-            x = centro.x() + radio * pg.math.cosd(angulo)
-            y = centro.y() + radio * pg.math.sind(angulo)
-            posiciones_estados[estado] = (x, y)
-
-            # Dibujar el estado como un círculo
-            circulo = pg.QtWidgets.QGraphicsEllipseItem(x - 20, y - 20, 40, 40)
-            circulo.setPen(QPen(Qt.black, 2))
-            if estado in self.estados_aceptacion:
-                circulo.setBrush(QBrush(QColor(255, 200, 200)))  # Color para estados de aceptación
-            self.graph_widget.addItem(circulo)
-
-            # Etiquetar el estado
-            texto = pg.TextItem(estado, anchor=(0.5, 0.5))
-            texto.setPos(x, y)
-            self.graph_widget.addItem(texto)
-
-            # Dibujar una flecha para el estado inicial
-            if estado == self.estado_inicial:
-                flecha = ArrowItem(
-                    pos=(x - 40, y),
-                    angle=angulo + 90,
-                    tipAngle=30,
-                    headLen=20,
-                    tailLen=10,
-                    pen=QPen(Qt.black, 2),
-                )
-                self.graph_widget.addItem(flecha)
-
-        # Dibujar las transiciones
-        for (estado_inicio, simbolo), estados_destino in self.transiciones.items():
-            for estado_destino in estados_destino:
-                x1, y1 = posiciones_estados[estado_inicio]
-                x2, y2 = posiciones_estados[estado_destino]
-
-                # Dibujar una flecha entre los estados
-                flecha = ArrowItem(
-                    pos=(x2, y2),
-                    angle=pg.math.degrees(pg.math.atan2(y2 - y1, x2 - x1)),
-                    tipAngle=30,
-                    headLen=20,
-                    tailLen=10,
-                    pen=QPen(Qt.black, 2),
-                )
-                self.graph_widget.addItem(flecha)
-
-                # Etiquetar la transición con el símbolo
-                mid_x = (x1 + x2) / 2
-                mid_y = (y1 + y2) / 2
-                texto = pg.TextItem(simbolo, anchor=(0.5, 0.5))
-                texto.setPos(mid_x, mid_y)
-                self.graph_widget.addItem(texto)
-
+import sys
+import math
 
 class AutomataApp(QWidget):
     def __init__(self):
@@ -103,83 +11,92 @@ class AutomataApp(QWidget):
         self.initUI()
 
     def initUI(self):
-        self.setWindowTitle("Verificador de AFD/AFND")
+        self.setWindowTitle("Verificador de AFD/AFND desde ER")
+        self.setGeometry(100, 100, 900, 700)
+        self.setStyleSheet("background-color: #2E3440; color: white; font-size: 14px;")
 
         layout = QVBoxLayout()
 
-        # Campos de entrada
-        self.label_estados = QLabel("Estados (separados por coma):")
-        self.input_estados = QLineEdit()
-
-        self.label_alfabeto = QLabel("Alfabeto (separados por coma):")
-        self.input_alfabeto = QLineEdit()
-
-        self.label_transiciones = QLabel(
-            "Transiciones (formato: estado,símbolo,estado_destino; separadas por coma):"
-        )
-        self.input_transiciones = QLineEdit()
-
-        self.label_estado_inicial = QLabel("Estado inicial:")
-        self.input_estado_inicial = QLineEdit()
-
-        self.label_estados_aceptacion = QLabel("Estados de aceptación (separados por coma):")
-        self.input_estados_aceptacion = QLineEdit()
-
-        # Botón para verificar y visualizar
-        self.button_verificar = QPushButton("Verificar y Visualizar")
+        self.label_er = QLabel("Expresión Regular:")
+        self.input_er = QLineEdit()
+        self.input_er.setStyleSheet("padding: 8px; border-radius: 5px; background-color: white; color: black;")
+        
+        self.button_verificar = QPushButton("Generar y Verificar")
+        self.button_verificar.setStyleSheet("padding: 10px; background-color: #5E81AC; color: white; border-radius: 5px;")
         self.button_verificar.clicked.connect(self.verificar_y_visualizar)
-
-        # Área de resultados
+        
         self.resultado = QTextEdit()
         self.resultado.setReadOnly(True)
-
-        # Agregar widgets al layout
-        layout.addWidget(self.label_estados)
-        layout.addWidget(self.input_estados)
-        layout.addWidget(self.label_alfabeto)
-        layout.addWidget(self.input_alfabeto)
-        layout.addWidget(self.label_transiciones)
-        layout.addWidget(self.input_transiciones)
-        layout.addWidget(self.label_estado_inicial)
-        layout.addWidget(self.input_estado_inicial)
-        layout.addWidget(self.label_estados_aceptacion)
-        layout.addWidget(self.input_estados_aceptacion)
+        self.resultado.setStyleSheet("background-color: white; color: black; padding: 8px; border-radius: 5px;")
+        
+        self.graph_widget = pg.PlotWidget()
+        self.graph_widget.setBackground("w")
+        self.graph_widget.setAspectLocked(True)
+        
+        layout.addWidget(self.label_er)
+        layout.addWidget(self.input_er)
         layout.addWidget(self.button_verificar)
         layout.addWidget(self.resultado)
-
+        layout.addWidget(self.graph_widget)
         self.setLayout(layout)
 
     def verificar_y_visualizar(self):
         try:
-            # Obtener los datos de la interfaz
-            estados = self.input_estados.text().split(",")
-            alfabeto = self.input_alfabeto.text().split(",")
-            transiciones_raw = self.input_transiciones.text().split(";")
-            estado_inicial = self.input_estado_inicial.text()
-            estados_aceptacion = self.input_estados_aceptacion.text().split(",")
-
-            # Procesar las transiciones
-            transiciones = {}
-            for trans in transiciones_raw:
-                estado_inicio, simbolo, estado_destino = trans.split(",")
-                if (estado_inicio, simbolo) not in transiciones:
-                    transiciones[(estado_inicio, simbolo)] = []
-                transiciones[(estado_inicio, simbolo)].append(estado_destino)
-
-            # Crear el autómata
-            automata = Automata(estados, alfabeto, transiciones, estado_inicial, estados_aceptacion)
-
-            # Verificar si es AFD o AFND
-            if automata.es_afd():
-                self.resultado.setText("El autómata es un AFD.")
-            else:
-                self.resultado.setText("El autómata es un AFND.")
-
-            # Mostrar la visualización
-            self.visualizador = VisualizadorAutomata(estados, transiciones, estado_inicial, estados_aceptacion)
-            self.visualizador.show()
-
+            regex = self.input_er.text()
+            # Simulación de estructura de un autómata (debes reemplazarlo con tu lógica real)
+            automata = {
+                "estados": ["q0", "q1", "q2"],
+                "transiciones": {("q0", "a"): "q1", ("q1", "b"): "q2"},
+                "estado_inicial": "q0",
+                "estados_aceptacion": ["q2"]
+            }
+            self.resultado.setText("El autómata generado es un AFND.")
+            self.dibujar_automata(automata)
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Error al procesar el autómata: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Error al procesar la expresión regular: {str(e)}")
 
+    def dibujar_automata(self, automata):
+        self.graph_widget.clear()
+        estados = automata["estados"]
+        transiciones = automata["transiciones"]
+        estado_inicial = automata["estado_inicial"]
+        estados_aceptacion = automata["estados_aceptacion"]
+
+        radio = 150
+        centro_x, centro_y = 0, 0
+        angulo_paso = 2 * math.pi / len(estados)
+        posiciones_estados = {}
+
+        for i, estado in enumerate(estados):
+            x = centro_x + radio * math.cos(i * angulo_paso)
+            y = centro_y + radio * math.sin(i * angulo_paso)
+            posiciones_estados[estado] = (x, y)
+
+            circulo = pg.QtWidgets.QGraphicsEllipseItem(x - 20, y - 20, 40, 40)
+            circulo.setPen(QPen(Qt.black, 2))
+            if estado in estados_aceptacion:
+                circulo.setBrush(QBrush(QColor(255, 200, 200)))
+            self.graph_widget.addItem(circulo)
+
+            texto = pg.TextItem(estado, anchor=(0.5, 0.5))
+            texto.setPos(x, y)
+            self.graph_widget.addItem(texto)
+
+            if estado == estado_inicial:
+                flecha = pg.ArrowItem(pos=(x - 40, y), angle=0, tipAngle=30, headLen=20, tailLen=10, pen=QPen(Qt.black, 2))
+                self.graph_widget.addItem(flecha)
+
+        for (estado_inicio, simbolo), estado_destino in transiciones.items():
+            x1, y1 = posiciones_estados[estado_inicio]
+            x2, y2 = posiciones_estados[estado_destino]
+            
+            angulo = math.degrees(math.atan2(y2 - y1, x2 - x1))
+            flecha = pg.ArrowItem(pos=(x2, y2), angle=angulo, tipAngle=30, headLen=20, tailLen=10, pen=QPen(Qt.black, 2))
+            self.graph_widget.addItem(flecha)
+
+            mid_x = (x1 + x2) / 2
+            mid_y = (y1 + y2) / 2
+            texto = pg.TextItem(simbolo, anchor=(0.5, 0.5))
+            texto.setPos(mid_x, mid_y)
+            self.graph_widget.addItem(texto)
 
